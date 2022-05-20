@@ -14,9 +14,14 @@ These files are distributed on an AS IS BASIS, WITHOUT WARRANTIES OR CONDITIONS 
 
 ## April 2018
 Initial creation
-
-## Framework
+## Frameworks
 - https://www.npmjs.com/package/twitter-api-v2
+
+## Setup env & Requirements
+- install node
+- `npm install`
+- Twitter Developer Account
+- AWS account
 
 ## Step guides
 
