@@ -1,43 +1,55 @@
-var Twitter = require('twitter');
-var AWS = require('aws-sdk');
+var { ETwitterStreamEvent, TwitterApi } = require('twitter-api-v2');
+const AWS = require('aws-sdk');
 
-AWS.config.loadFromPath('./config.json');
+const client = new TwitterApi('<Bearer Token>'); // (create a client)
 
-var kinesis = new AWS.Kinesis();
+(async () => {
+  // Add rules
+  const addedRules = await client.v2.updateStreamRules({
+    add: [
+      {
+        value: 'cat',
+      },
+    ],
+  });
 
-var client = new Twitter({
-    consumer_key: "twitter consumer key here",
-    consumer_secret: "twitter consumer secret here",
-    access_token_key: "twitter access token key here",
-    access_token_secret: "twitter access token secret here"
-});
+  const stream = await client.v2.searchStream({
+    'tweet.fields': ['referenced_tweets', 'author_id', 'created_at'],
+    expansions: ['referenced_tweets.id'],
+  });
 
-var stream = client.stream('statuses/filter', {
-    track: 'cat',
-    language: 'en'
-});
+  AWS.config.loadFromPath('./config.json');
 
-stream.on('data', function (event) {
+  var kinesis = new AWS.Kinesis();
+
+  // Assign yor event handlers
+  // Emitted on Tweet
+  stream.on(ETwitterStreamEvent.Data, (context) => {
+    const event = context.data;
+    // console.log(event.id);
     if (event.text) {
-        var record = JSON.stringify({
-            id: event.id,
-            timestamp: event['created_at'],
-            tweet: event.text.replace(/["'}{|]/g, '') //either strip out problem characters or base64 encode for safety 
-        }) + '|'; // record delimiter
+      // console.log(`text: ${event.text}`);
+      var record = JSON.stringify({
+        id: event.id,
+        timestamp: event['created_at'],
+        tweet: event.text.replace(/["'}{|]/g, '') //either strip out problem characters or base64 encode for safety 
+      }) + '|'; // record delimiter
 
-        kinesis.putRecord({
-            Data: record,
-            StreamName: 'twitterStream',
-            PartitionKey: 'key'
-        }, function (err, data) {
-            if (err) {
-                console.error(err);
-            }
-            console.log('sending: ', event.text);
-        });
+      kinesis.putRecord({
+        Data: record,
+        StreamName: 'twitterStream',
+        PartitionKey: 'key'
+      }, function (err, data) {
+        if (err) {
+          console.error(err);
+        }
+        console.log('sending: ', record);
+      });
     }
-});
+  });
+  // Emitted only on initial connection success
+  stream.on(ETwitterStreamEvent.Connected, () => console.log('Stream is started.'));
 
-stream.on('error', function (error) {
-    throw error;
-});
+  // Start stream!
+  await stream.connect({ autoReconnect: true, autoReconnectRetries: Infinity });
+})().catch(console.error)
